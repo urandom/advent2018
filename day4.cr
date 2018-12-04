@@ -51,4 +51,16 @@ max_minute = {0, 0}
 end
 
 puts "Max sleepy minute #{max_minute[0]}"
-puts "Answer #{max_awake[0] * max_minute[0]}"
+puts "Part 1 answer: #{max_awake[0] * max_minute[0]}"
+
+max_awake_min = guards.map do |id, shifts|
+	awakes = shifts.map { |s| s.awake }
+	to_max = awakes.map { |awake| awake.map { |v| v ? 0 : 1 } }.transpose.map { |a| a.sum }
+
+	{id, (to_max.index to_max.max) || 0, awakes.size}
+end
+
+most_sleepy = max_awake_min.sort { |a, b| b[2] <=> a[2] }[0]
+puts "Most sleepy guard #{most_sleepy[0]} at minute #{most_sleepy[1]}"
+
+puts "Part 2 answer: #{most_sleepy[0] * most_sleepy[1]}"
