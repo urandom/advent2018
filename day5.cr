@@ -9,6 +9,21 @@ def reduce(data : Array(Char)) : Array(Char) | Nil
 	return nil
 end
 
+def filter(data : Array(Char))
+	charset = Set.new data.join("").downcase.chars
+
+	return charset.map { |c|
+		dup = data.dup
+		dup.delete(c)
+		dup.delete(c.upcase)
+		reduce(dup) || Array(Char).new
+	}.map(&.size).select{ |s| s > 0 }.min
+end
+
 data = File.open("day5.input", &.gets).not_nil!.chars
 
-puts "Reduced size: #{reduce(data).try &.size}"
+data = reduce(data).not_nil!
+
+puts "Reduced size: #{data.size}"
+
+puts "Further reduced size #{filter(data)}"
