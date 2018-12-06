@@ -1,10 +1,12 @@
 coords = File.read_lines("day6.input").map { |l| l.split(", ").map &.to_i }
+max_dist = 10000
 max_x = coords.max_by(&.[0])[0]
 max_y = coords.max_by(&.[1])[1]
 
 sizes = Array(Int32).new coords.size, 0
 infs = Array(Bool).new coords.size, false
 
+safest_size = 0
 0.upto(max_x).each do |x|
 	0.upto(max_y).each do |y|
 		dists = coords.map_with_index { |(px, py), i|
@@ -18,8 +20,11 @@ infs = Array(Bool).new coords.size, false
 				infs[dists[0][0]] = true
 			end
 		end
+
+		safest_size += 1 if dists.sum &.[1] < max_dist
 	end
 end
 
 infs.each_with_index { |v, i| sizes[i] = 0 if v }
 puts "Size of largest area: #{sizes.max}"
+puts "Safest region size: #{safest_size}"
