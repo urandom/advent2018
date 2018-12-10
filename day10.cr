@@ -56,6 +56,7 @@ points = File.read_lines("day10.input").map do |l|
 	Point.new m[1].not_nil!.to_i, m[3].not_nil!.to_i, m[5].not_nil!.to_i, m[7].not_nil!.to_i
 end
 
+i = 1
 while true
 	points.each &.move
 
@@ -63,5 +64,7 @@ while true
 		chart points
 		break
 	end
+	i+=1
 end
 
+puts "Total seconds: #{i}"
