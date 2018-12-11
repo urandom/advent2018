@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::Result;
 use std::io::BufReader;
+use std::cmp;
 
 #[derive(StructOpt)]
 struct Cli {
@@ -30,19 +31,45 @@ fn main() -> Result<()> {
     }
 
     let mut max_power : (usize, usize, i32) = (0, 0, 0);
-    for (i, _) in grid.iter().enumerate() {
-        let (x, y) = idx_to_coords(i);
-        if x < COLS - 2 && y < COLS - 2 {
-            let p = square_power(x, y, grid);
-            let (_, _, max_p) = max_power;
-            if p > max_p {
-                max_power = (x, y, p);
+    for x in 0..COLS-2 {
+        for y in 0..COLS-2 {
+            if x < COLS - 2 && y < COLS - 2 {
+                let p = square_power(x, y, 3, grid);
+                let (_, _, max_p) = max_power;
+                if p > max_p {
+                    max_power = (x, y, p);
+                }
             }
         }
     }
 
     let (max_x, max_y, _) = max_power;
-    println!("Coordinates with max power: {},{}", max_x, max_y);
+    println!("Coordinates with max power for 3x3 box: {},{}", max_x, max_y);
+
+    let mut max_power : (usize, usize, usize, i32) = (0, 0, 0, 0);
+    for x in 0..COLS {
+        for y in 0..COLS {
+            let min = COLS - cmp::max(x, y) - 1;
+
+            let mut p = 0;
+            for s in 0..=min {
+                for sy in 0..=s {
+                    p += grid[(y+sy)*COLS+x+s];
+                    p += grid[(y+s)*COLS+x+sy];
+                }
+                // Remove the duplicate
+                p -= grid[(y+s)*COLS+x+s];
+
+                let (_, _, _, max_p) = max_power;
+                if p > max_p {
+                    max_power = (x, y, s+1, p);
+                }
+            }
+        }
+    }
+
+    let (max_x, max_y, max_s, _) = max_power;
+    println!("Coordinates with max power for {}x{} box: {},{},{}", max_s, max_s, max_x, max_y, max_s);
 
     Ok(())
 }
@@ -58,21 +85,14 @@ fn coords_to_idx(x: usize, y: usize) -> usize {
     return y * COLS + x;
 }
 
-fn square_power(x: usize, y: usize, grid: [i32; GRID_SIZE]) -> i32 {
-    let i1 = coords_to_idx(x, y);
-    let mut power = grid[i1];
-    power += grid[i1+1];
-    power += grid[i1+2];
-
-    let i2 = coords_to_idx(x, y+1);
-    power += grid[i2];
-    power += grid[i2+1];
-    power += grid[i2+2];
-
-    let i3 = coords_to_idx(x, y+2);
-    power += grid[i3];
-    power += grid[i3+1];
-    power += grid[i3+2];
+fn square_power(x: usize, y: usize, s: usize, grid: [i32; GRID_SIZE]) -> i32 {
+    let mut power : i32 = 0;
+    let idx = coords_to_idx(x, y);
+    for i in 0..s {
+        for j in 0..s {
+            power += grid[idx+j+i*COLS];
+        }
+    }
 
     return power;
 }
