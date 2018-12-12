@@ -17,6 +17,7 @@ struct Rule {
 }
 
 const GEN : usize = 20;
+const GEN2 : usize = 50000000000;
 
 fn main() -> Result<()> {
     let cli = Cli::from_args();
@@ -53,7 +54,10 @@ fn main() -> Result<()> {
         rules.push(r);
     }
 
-    for _ in 0..GEN {
+    let mut prev = 0;
+    let mut diff : i32 = 0;
+    let mut repeats = 0;
+    for g in 0..GEN2 {
         let orig = state.to_vec();
         let mut left = 0;
         let mut right = 0;
@@ -74,9 +78,20 @@ fn main() -> Result<()> {
         (0..left).for_each(|_| state.insert(0, false));
         (0..right).for_each(|_| state.push(false));
         offset += left;
+
+        let sum = calc_potted(&state, offset);
+        if sum-prev == diff {
+            repeats += 1;
+        }
+        if repeats == 10 {
+            println!("Sum: {}", (diff as i64) * ((GEN2 - g - 1) as i64) + (sum as i64));
+            break;
+        }
+        diff = sum-prev;
+        prev = sum;
     }
 
-    println!("Sum: {}", calc_potted(&state, offset));
+    // println!("Sum: {}", calc_potted(&state, offset));
 
     Ok(())
 }
