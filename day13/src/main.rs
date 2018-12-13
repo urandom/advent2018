@@ -25,6 +25,7 @@ enum Turn {
 const INTER : [Turn; 3] = [Turn::Left, Turn::Straight, Turn::Right];
 
 #[derive(Debug)]
+#[derive(Copy, Clone)]
 struct Cart {
     x: usize,
     y: usize,
@@ -68,10 +69,15 @@ fn main() -> Result<()> {
     }
 
     let mut positions : HashSet<(usize, usize)> = HashSet::new();
+    let mut crashes : HashSet<(usize, usize)> = HashSet::new();
     'outer: loop {
         carts.sort_by(cart_comp);
 
         for c in &mut carts {
+            if crashes.contains(&(c.x, c.y)) {
+                continue;
+            }
+
             positions.remove(&(c.x, c.y));
             match c.dir {
                 Dir::Right => c.x += 1,
@@ -83,10 +89,23 @@ fn main() -> Result<()> {
 
             if positions.contains(&(c.x, c.y)) {
                 println!("Collision: {},{}", c.x, c.y);
-                break 'outer;
+                crashes.insert((c.x, c.y));
+            } else {
+                positions.insert((c.x, c.y));
             }
-            positions.insert((c.x, c.y));
         }
+
+        if crashes.len() > 0 {
+            carts = carts.iter().filter(|c| !crashes.contains(&(c.x, c.y))).map(|c| c.clone()).collect();
+        }
+
+        if carts.len() == 1 {
+            println!("Last cart at: {},{}", carts[0].x, carts[0].y);
+            break 'outer;
+        }
+
+        crashes.iter().for_each(|c| { positions.remove(c); });
+        crashes.clear();
     }
 
     Ok(())
