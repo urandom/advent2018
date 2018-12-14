@@ -12,20 +12,33 @@ fn main() -> Result<()> {
     let total = upto + 10;
     let mut current = [0, 1];
     let mut scores = vec![3, 7];
+    let digits = digits(upto);
+    let digits = digits.as_slice();
 
-    while scores.len() < total {
+    loop {//while scores.len() < total {
         let sum = scores[current[0]] + scores[current[1]];
         if sum > 9 {
             scores.push(sum / 10);
 
             if scores.len() == total {
-                break;
+                //break;
             }
         }
         scores.push(sum % 10);
 
         current[0] = (current[0] + scores[current[0]] + 1) % scores.len();
         current[1] = (current[1] + scores[current[1]] + 1) % scores.len();
+
+        if scores.len() >= digits.len()+1 {
+            if scores[scores.len() - digits.len()..] == *digits {
+                println!("Number of recipes: {}", scores.len() - digits.len());
+                break;
+            }
+            if scores[scores.len() - digits.len() - 1..scores.len() - 1] == *digits {
+                println!("Number of recipes: {}", scores.len() - digits.len()-1);
+                break;
+            }
+        }
     }
 
     let mut res = String::new();
@@ -35,4 +48,17 @@ fn main() -> Result<()> {
     println!("Last 10 scores: {}", res);
 
     Ok(())
+}
+
+fn digits(upto: usize) -> Vec<usize> {
+    let mut num = upto;
+    let mut digits = Vec::new();
+
+    while num != 0 {
+        let r = num % 10;
+        digits.insert(0, r);
+        num /= 10;
+    }
+
+    return digits;
 }
