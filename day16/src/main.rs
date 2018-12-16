@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::io::Result;
+use std::iter::FromIterator;
 
 type Data = [usize; 4];
 type Operands = [usize; 3];
@@ -15,10 +18,10 @@ struct Device {
 
     testing: Vec<TestData>,
     instructions: Vec<Data>,
-    opcodes: Vec<OpCode>,
+    opcodes: HashMap<i32, OpCode>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum Oper {
     Addr, Addi,
     Mulr, Muli,
@@ -29,11 +32,10 @@ enum Oper {
     Eqir, Eqri, Eqrr,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct OpCode {
-    number: usize,
+    number: i32,
     operation: Oper,
-    operands: Operands,
 }
 
 impl TestData {
@@ -89,18 +91,17 @@ impl Device {
         Ok(device)
     }
 
-    fn num_samples_for_opcodes(&mut self, size: usize) -> usize {
+    fn num_samples_for_opcodes(&self, size: usize) -> usize {
         let mut count = 0;
         for test in &self.testing {
             let mut matching = 0;
 
-            for op in &mut self.opcodes {
-                let mut opcode = op;
-                opcode.number = test.1[0];
-                opcode.operands = data_to_operands(test.1);
-                let mut registers = test.0;
+            for (_, op) in &self.opcodes {
+                let mut opcode = op.clone();
+                let (num, operands) = data_to_operands(test.1);
+                opcode.number = num;
 
-                opcode.call(&mut registers);
+                let registers = opcode.call(&test.0, operands);
 
                 if test.2 == registers {
                     matching += 1;
@@ -114,64 +115,135 @@ impl Device {
 
         count
     }
+
+    fn identify_opcodes(&mut self) {
+        let mut all_matching = HashMap::new();
+        let mut found_ids = HashSet::new();
+
+        for test in &self.testing {
+            if found_ids.contains(&test.1[0]) {
+                continue;
+            }
+
+            let mut matching = Vec::new();
+
+            for (_, op) in &self.opcodes {
+                if op.is_valid() {
+                    continue;
+                }
+
+                let mut opcode = op.clone();
+                let (num, operands) = data_to_operands(test.1);
+                opcode.number = num;
+
+                let registers = opcode.call(&test.0, operands);
+
+                if test.2 == registers {
+                    matching.push(op.number);
+                }
+            }
+
+            if matching.len() == 1 {
+                let mut op = self.opcodes.remove(&matching[0]).unwrap();
+                found_ids.insert(test.1[0]);
+
+                op.number = test.1[0] as i32;
+                self.opcodes.insert(op.number, op);
+
+                all_matching.remove(&test.1[0]);
+            } else {
+                all_matching.insert(test.1[0], matching);
+            }
+        }
+    }
+
+    fn execute_sample(&self) -> usize {
+        let mut registers = self.registers;
+        for instr in &self.instructions {
+            let (num, operands) = data_to_operands(*instr);
+            let op = self.opcodes.get(&num).unwrap();
+            registers = op.call(&registers, operands);
+        }
+
+        registers[0]
+    }
 }
 
 impl OpCode {
-    fn new(operation: Oper) -> OpCode {
-        OpCode{number: 0, operation, operands: [0; 3]}
+    fn new(number: i32, operation: Oper) -> OpCode {
+        OpCode{number, operation}
     }
 
-    fn generate() -> Vec<OpCode> {
-        vec![
-            OpCode::new(Oper::Addr), OpCode::new(Oper::Addi),
-            OpCode::new(Oper::Mulr), OpCode::new(Oper::Muli),
-            OpCode::new(Oper::Banr), OpCode::new(Oper::Bani),
-            OpCode::new(Oper::Borr), OpCode::new(Oper::Bori),
-            OpCode::new(Oper::Setr), OpCode::new(Oper::Seti),
-            OpCode::new(Oper::Gtir), OpCode::new(Oper::Gtri), OpCode::new(Oper::Gtrr),
-            OpCode::new(Oper::Eqir), OpCode::new(Oper::Eqri), OpCode::new(Oper::Eqrr),
-        ]
+    fn generate() -> HashMap<i32, OpCode> {
+        HashMap::from_iter(
+            vec![
+                OpCode::new(-1,Oper::Addr), OpCode::new(-2, Oper::Addi),
+                OpCode::new(-3, Oper::Mulr), OpCode::new(-4, Oper::Muli),
+                OpCode::new(-5, Oper::Banr), OpCode::new(-6, Oper::Bani),
+                OpCode::new(-7, Oper::Borr), OpCode::new(-8, Oper::Bori),
+                OpCode::new(-9, Oper::Setr), OpCode::new(-10, Oper::Seti),
+                OpCode::new(-11, Oper::Gtir), OpCode::new(-12, Oper::Gtri), OpCode::new(-13, Oper::Gtrr),
+                OpCode::new(-14, Oper::Eqir), OpCode::new(-15, Oper::Eqri), OpCode::new(-16, Oper::Eqrr),
+            ].iter().map(|op| (op.number, *op))
+        )
     }
 
-    fn call(&self, registers: &mut Data) {
+
+    fn call(&self, original: &Data, operands: Operands) -> Data {
+        let mut registers = original.clone();
         match self.operation {
-            Oper::Addr => registers[self.operands[2]] =
-                registers[self.operands[0]] + registers[self.operands[1]],
-            Oper::Addi => registers[self.operands[2]] =
-                registers[self.operands[0]] + self.operands[1],
-            Oper::Mulr => registers[self.operands[2]] =
-                registers[self.operands[0]] * registers[self.operands[1]],
-            Oper::Muli => registers[self.operands[2]] =
-                registers[self.operands[0]] * self.operands[1],
-            Oper::Banr => registers[self.operands[2]] =
-                registers[self.operands[0]] & registers[self.operands[1]],
-            Oper::Bani => registers[self.operands[2]] =
-                registers[self.operands[0]] & self.operands[1],
-            Oper::Borr => registers[self.operands[2]] =
-                registers[self.operands[0]] | registers[self.operands[1]],
-            Oper::Bori => registers[self.operands[2]] =
-                registers[self.operands[0]] | self.operands[1],
-            Oper::Setr => registers[self.operands[2]] = registers[self.operands[0]],
-            Oper::Seti => registers[self.operands[2]] = self.operands[0],
-            Oper::Gtir => registers[self.operands[2]] =
-                if self.operands[0] > registers[self.operands[1]] { 1 } else { 0 },
-            Oper::Gtri => registers[self.operands[2]] =
-                if registers[self.operands[0]] > self.operands[1] { 1 } else { 0 },
-            Oper::Gtrr => registers[self.operands[2]] =
-                if registers[self.operands[0]] > registers[self.operands[1]] { 1 } else { 0 },
-            Oper::Eqir => registers[self.operands[2]] =
-                if self.operands[0] == registers[self.operands[1]] { 1 } else { 0 },
-            Oper::Eqri => registers[self.operands[2]] =
-                if registers[self.operands[0]] == self.operands[1] { 1 } else { 0 },
-            Oper::Eqrr => registers[self.operands[2]] =
-                if registers[self.operands[0]] == registers[self.operands[1]] { 1 } else { 0 },
+            Oper::Addr => registers[operands[2]] =
+                registers[operands[0]] + registers[operands[1]],
+            Oper::Addi => registers[operands[2]] =
+                registers[operands[0]] + operands[1],
+            Oper::Mulr => registers[operands[2]] =
+                registers[operands[0]] * registers[operands[1]],
+            Oper::Muli => registers[operands[2]] =
+                registers[operands[0]] * operands[1],
+            Oper::Banr => registers[operands[2]] =
+                registers[operands[0]] & registers[operands[1]],
+            Oper::Bani => registers[operands[2]] =
+                registers[operands[0]] & operands[1],
+            Oper::Borr => registers[operands[2]] =
+                registers[operands[0]] | registers[operands[1]],
+            Oper::Bori => registers[operands[2]] =
+                registers[operands[0]] | operands[1],
+            Oper::Setr => registers[operands[2]] = registers[operands[0]],
+            Oper::Seti => registers[operands[2]] = operands[0],
+            Oper::Gtir => registers[operands[2]] =
+                if operands[0] > registers[operands[1]] { 1 } else { 0 },
+            Oper::Gtri => registers[operands[2]] =
+                if registers[operands[0]] > operands[1] { 1 } else { 0 },
+            Oper::Gtrr => registers[operands[2]] =
+                if registers[operands[0]] > registers[operands[1]] { 1 } else { 0 },
+            Oper::Eqir => registers[operands[2]] =
+                if operands[0] == registers[operands[1]] { 1 } else { 0 },
+            Oper::Eqri => registers[operands[2]] =
+                if registers[operands[0]] == operands[1] { 1 } else { 0 },
+            Oper::Eqrr => registers[operands[2]] =
+                if registers[operands[0]] == registers[operands[1]] { 1 } else { 0 },
         }
+
+        registers
+    }
+
+    fn is_valid(&self) -> bool {
+        self.number >= 0
     }
 }
 
 fn main() -> Result<()> {
     assert_eq!(Device::from("test1.input")?.num_samples_for_opcodes(3), 1);
-    println!("Sample count for 3 or more opcodes: {}", Device::from("input")?.num_samples_for_opcodes(3));
+
+    let mut device = Device::from("input")?;
+    let samples = device.num_samples_for_opcodes(3);
+    assert_eq!(samples, 547);
+    println!("Sample count for 3 or more opcodes: {}", samples);
+
+    device.identify_opcodes();
+    let sample = device.execute_sample();
+    assert_eq!(sample, 582);
+    println!("Register 0: {}", device.execute_sample());
     
     Ok(())
 }
@@ -186,6 +258,6 @@ fn vec_to_data(d: &Vec<usize>) -> Data {
     data
 }
 
-fn data_to_operands(d: Data) -> Operands {
-    [d[1], d[2], d[3]]
+fn data_to_operands(d: Data) -> (i32, Operands) {
+    (d[0] as i32, [d[1], d[2], d[3]])
 }
