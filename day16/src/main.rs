@@ -238,7 +238,7 @@ fn main() -> Result<()> {
     device.identify_opcodes();
     let sample = device.execute_sample();
     assert_eq!(sample, 582);
-    println!("Register 0: {}", device.execute_sample());
+    println!("Register 0: {}", sample);
     
     Ok(())
 }
