@@ -117,7 +117,6 @@ impl Device {
     }
 
     fn identify_opcodes(&mut self) {
-        let mut all_matching = HashMap::new();
         let mut found_ids = HashSet::new();
 
         for test in &self.testing {
@@ -149,10 +148,6 @@ impl Device {
 
                 op.number = test.1[0] as i32;
                 self.opcodes.insert(op.number, op);
-
-                all_matching.remove(&test.1[0]);
-            } else {
-                all_matching.insert(test.1[0], matching);
             }
         }
     }
