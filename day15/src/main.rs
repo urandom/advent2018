@@ -41,6 +41,8 @@ fn main() -> Result<()> {
     let mut dungeon : Vec<Vec<BG>> = Vec::new();
     let mut units : Vec<Unit> = Vec::new();
 
+    let elf_attack = std::env::args().nth(2).map_or(3, |v| v.trim().parse().unwrap());
+
     for (y, line) in reader.lines().enumerate() {
         let l = line.unwrap();
 
@@ -51,11 +53,12 @@ fn main() -> Result<()> {
                 kind: if c == 'G' { UnitType::Goblin } else { UnitType::Elf },
                 pos: (x, y),
                 health: 200,
-                attach: AP,
+                attach: if c == 'G' { AP } else { elf_attack },
             }));
     }
 
-    print_dungeon(&dungeon, &units);
+    //print_dungeon(&dungeon, &units);
+    println!("Starting # of elves: {}", units.iter().filter(|u| u.kind == UnitType::Elf).count());
     let mut round: usize = 0;
     'turn: loop {
         units.sort_by(unit_comp);
@@ -92,9 +95,11 @@ fn main() -> Result<()> {
         println!("After round {}", round);
         print_dungeon(&dungeon, &units);
     }
+    units = units.iter().filter(|u| u.health > 0).map(|&u| u).collect();
 
     println!("Full round: {}", round);
     print_dungeon(&dungeon, &units);
+    println!("Ending # of elves: {}", units.iter().filter(|u| u.kind == UnitType::Elf).count());
 
     let sum: usize = units.iter().map(|u| u.health).sum();
     println!("Outcome: {}", sum * round);
@@ -129,7 +134,7 @@ fn attack(unit: &Unit, enemies: &Vec<Pos>, units: &mut Vec<Unit>, dungeon: &mut 
     }
 
     let idx = units.iter().position(|u| u.pos == ranged_enemies[0].pos).unwrap();
-    if units[idx].health < unit.attach {
+    if units[idx].health <= unit.attach {
         units[idx].health = 0;
         let (x, y) = units[idx].pos;
         dungeon[y][x] = BG::Floor;
