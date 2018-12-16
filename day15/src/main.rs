@@ -94,6 +94,7 @@ fn main() -> Result<()> {
 
         println!("After round {}", round);
         print_dungeon(&dungeon, &units);
+        println!("{:?}", units);
     }
     units = units.iter().filter(|u| u.health > 0).map(|&u| u).collect();
 
