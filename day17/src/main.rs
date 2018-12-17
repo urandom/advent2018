@@ -116,7 +116,7 @@ impl Cavern {
         Ok(Cavern::new(data, debug))
     }
 
-    fn count_water(&self) -> usize {
+    fn water(&self) -> HashSet<Pos> {
         if self.debug {
             println!("{}", self);
         }
@@ -127,7 +127,7 @@ impl Cavern {
 
         self.trace_stream((500, min_y), Flow::Down, &mut seen, *max_y, None);
 
-        seen.len()
+        seen
     }
 
     fn trace_stream(&self, pos: Pos, dir: Flow, seen: &mut HashSet<Pos>, max_y: usize, floor: Option<RangeI<usize>>) {
@@ -177,6 +177,7 @@ impl Cavern {
                 }
             },
             Flow::Up => {
+                let floor = floor.or(self.floor(pos));
                 if let Some(range) = self.container(pos, floor.clone()) {
                     if self.debug {
                         println!("Filling container of {:?} at {:?}", range, pos);
@@ -198,33 +199,34 @@ impl Cavern {
         }
     }
 
-    fn container(&self, pos: Pos, floor: Option<RangeI<usize>>) -> Option<RangeI<usize>> {
-        let mut floor = floor;
-        if self.clay.get(&(pos.1)).is_none() {
-            return None;
+    fn floor(&self, pos: Pos) -> Option<RangeI<usize>> {
+        if let Some(xs) = self.clay.get(&(pos.1+1)) {
+            let (mut min_x, mut max_x) = (None, None);
+            let mut i = 1;
+            loop {
+                if min_x.is_none() && !xs.contains(&(pos.0-i)) {
+                    min_x = Some(pos.0-i+1);
+                }
+
+                if max_x.is_none() && !xs.contains(&(pos.0+i)) {
+                    max_x = Some(pos.0+i-1);
+                }
+
+                if min_x.is_some() && max_x.is_some() {
+                    break
+                }
+
+                i+=1;
+            }
+            return Some((min_x.unwrap())..=(max_x.unwrap()));
         }
 
-        if floor.is_none() {
-            if let Some(xs) = self.clay.get(&(pos.1+1)) {
-                let (mut min_x, mut max_x) = (None, None);
-                let mut i = 1;
-                loop {
-                    if min_x.is_none() && !xs.contains(&(pos.0-i)) {
-                        min_x = Some(pos.0-i+1);
-                    }
+        None
+    }
 
-                    if max_x.is_none() && !xs.contains(&(pos.0+i)) {
-                        max_x = Some(pos.0+i-1);
-                    }
-
-                    if min_x.is_some() && max_x.is_some() {
-                        break
-                    }
-
-                    i+=1;
-                }
-                floor = floor.or(Some((min_x.unwrap())..=(max_x.unwrap())));
-            }
+    fn container(&self, pos: Pos, floor: Option<RangeI<usize>>) -> Option<RangeI<usize>> {
+        if self.clay.get(&(pos.1)).is_none() {
+            return None;
         }
 
         if floor.is_none() {
@@ -269,9 +271,10 @@ impl Cavern {
 }
 
 fn main() -> Result<()> {
-    assert_eq!(Cavern::from("test1.input", false)?.count_water(), 57);
+    assert_eq!(Cavern::from("test1.input", false)?.water().len(), 57);
+    assert_eq!(Cavern::from("test2.input", false)?.water().len(), 54);
 
-    println!("Water tile count: {}", Cavern::from("input", true)?.count_water());
+    println!("Water tile count: {}", Cavern::from("input", true)?.water().len());
 
     Ok(())
 }
