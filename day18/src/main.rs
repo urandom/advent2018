@@ -102,6 +102,25 @@ impl Field {
         self
     }
 
+    fn locate_sustainable(&mut self, total: usize) -> &mut Self {
+        self.iterate_for(500);
+
+        let marker = self.resource();
+        for i in 0..100 {
+            if self.iterate_for(1).resource() == marker {
+                println!("Marker {} repeated after {}", marker, i+1);
+                let total = total - 500 - i - 1;
+                let rem = total % (i+1);
+
+                self.iterate_for(rem);
+                break;
+            }
+        }
+
+
+        self
+    }
+
     fn resource(&self) -> usize {
         self.area.iter().flatten().filter(|&&a| a == Acre::Lumber).count() *
             self.area.iter().flatten().filter(|&&a| a == Acre::Trees).count()
@@ -155,6 +174,7 @@ impl fmt::Display for Field {
 
 fn main() -> Result<()> {
     assert_eq!(Field::from("test1.input", false)?.iterate_for(10).resource(), 1147);
-    println!("Resource value: {}", Field::from("input", true)?.iterate_for(10).resource());
+    println!("Resource value: {}", Field::from("input", false)?.iterate_for(10).resource());
+    println!("Resource value: {}", Field::from("input", true)?.locate_sustainable(1000000000).resource());
     Ok(())
 }
