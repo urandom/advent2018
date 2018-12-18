@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::io::Result;
-use std::iter::FromIterator;
 use std::collections::{HashMap, HashSet};
 use std::collections::VecDeque;
 use std::ops::RangeInclusive as RangeI;
@@ -14,16 +13,16 @@ struct Cavern {
     debug: bool,
 }
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 enum WaterType {
     Flowing,
     Settled,
 }
 
+#[derive(PartialEq)]
 enum Flow {
     Down,
-    Left,
-    Right,
+    Sideways,
     Up,
 }
 
@@ -34,8 +33,7 @@ impl fmt::Display for Flow {
         let str = match self {
             Flow::Down => "down",
             Flow::Up => "up",
-            Flow::Right => "right",
-            Flow::Left => "left",
+            Flow::Sideways => "sideways",
         };
 
         write!(f, "{}", str)
@@ -66,7 +64,7 @@ impl fmt::Display for Cavern {
             let temp = HashSet::new();
             let xs = self.clay.get(&y).unwrap_or(&temp);
             //write!(f, "{}:\t\t", y)?;
-            for x in min_x..=max_x {
+            for x in min_x-2..=max_x+2 {
                 if y == 0 && x == 500 {
                     write!(f, "+")?;
                 }
@@ -135,94 +133,86 @@ impl Cavern {
         let min_y = 0;
         let max_y = self.clay.keys().max().unwrap();
 
-        self.trace_stream((500, min_y), Flow::Down, *max_y, None);
+        self.trace_stream((500, min_y), Flow::Down, *max_y);
 
         self.water.clone()
     }
 
-    fn trace_stream(&mut self, pos: Pos, dir: Flow, max_y: usize, floor: Option<RangeI<usize>>) {
+    fn trace_stream(&mut self, pos: Pos, dir: Flow, max_y: usize) {
         let mut deque = VecDeque::new();
-        deque.push_back((pos, dir, floor));
+        deque.push_back((pos, dir));
 
-        let mut iter = -1;
         while deque.len() > 0 {
-            let (pos, dir, floor) = deque.pop_front().unwrap();
-            iter += 1;
-
-            if self.debug && iter % 20 == 0 {
-                println!("Current cavern: {}", self.water.len());
-                println!("{}", self);
-            }
+            let (pos, dir) = deque.pop_front().unwrap();
 
             match dir {
-                Flow::Left | Flow::Right => {
+                Flow::Sideways => {
+                    let floor = self.floor(pos);
                     if floor.is_none() {
-                        continue
-                    }
-
-                    let x = if let Flow::Left = dir { pos.0 - 1 } else { pos.0 + 1 };
-                    if self.clay.get(&pos.1).map(|xs| xs.contains(&x)).unwrap_or(false) {
-                        let up = (pos.0, pos.1-1);
-                        let floor = self.floor(up);
-                        if self.container(pos, floor.clone()).is_some() {
-                            deque.push_back((up, Flow::Up, floor));
-                        }
-                        continue 
+                        continue;
                     }
 
                     let floor = floor.unwrap();
                     let (start, end) = (*floor.start(), *floor.end());
+                    let (mut min_x, mut max_x) = (pos.0, pos.0);
+                    let xs = self.clay.get(&pos.1);
 
-                    if start <= pos.0 && end >= pos.0 {
-                        let pos = (x, pos.1);
-                        self.water.insert(pos, WaterType::Flowing);
-                        if self.debug {
-                            println!("Flowing {} at {:?}", dir, pos);
-                        }
+                    if self.debug {
+                        println!("Flowing {} at {:?} on {:?}", dir, pos, floor);
+                    }
 
-                        deque.push_back((pos, dir, Some(floor.clone())));
+                    while min_x-1 >= start-1 && !self.is_settled((min_x-1, pos.1), xs) {
+                        min_x -= 1;
+                        self.water.insert((min_x, pos.1), WaterType::Flowing);
+                    }
 
-                        // Overflow to the side
-                        if start > x || end < x {
-                            deque.push_back((pos, Flow::Down, Some(floor)));
-                        }
+                    while max_x+1 <= end+1 && !self.is_settled((max_x+1, pos.1), xs) {
+                        max_x += 1;
+                        self.water.insert((max_x, pos.1), WaterType::Flowing);
+                    }
+
+                    if min_x < start && !deque.contains(&((min_x, pos.1), Flow::Down)) {
+                        deque.push_back(((min_x, pos.1), Flow::Down));
+                    }
+                    if max_x > end && !deque.contains(&((max_x, pos.1), Flow::Down)) {
+                        deque.push_back(((max_x, pos.1), Flow::Down));
                     }
                 },
                 Flow::Down => {
-                    if pos.1+1 > max_y || self.water.contains_key(&(pos.0, pos.1+1)) {
-                        continue
-                    }
-
-                    if self.clay.get(&(pos.1+1)).map(|xs| xs.contains(&pos.0)).unwrap_or(false) {
-                        // Clay underneath
-                        deque.push_back((pos, Flow::Up, None));
-                    } else {
-                        let pos = (pos.0, pos.1+1);
+                    let mut pos = pos;
+                    while pos.1+1 <= max_y && !self.is_settled((pos.0, pos.1+1), self.clay.get(&(pos.1+1))) {
+                        pos.1 += 1;
                         self.water.insert(pos, WaterType::Flowing);
                         if self.debug {
                             println!("Flowing {} at {:?}", dir, pos);
                         }
-                        deque.push_back((pos, Flow::Down, None));
+                    }
+
+                    if pos.1 > max_y {
+                        continue;
+                    }
+
+                    if !deque.contains(&(pos, Flow::Up)) {
+                        deque.push_back((pos, Flow::Up));
                     }
                 },
                 Flow::Up => {
-                    let floor = floor.or_else(|| self.floor(pos));
-                    if let Some(range) = self.container(pos, floor.clone()) {
+                    let mut pos = pos;
+                    while let Some(range) = self.container(pos, self.floor(pos)) {
                         if self.debug {
                             println!("Filling container of {:?} at {:?}", range, pos);
                         }
                         range.clone().for_each(|x| {self.water.insert((x, pos.1), WaterType::Settled);});
-                        let pos = (pos.0, pos.1-1);
-                        let floor = RangeI::new(range.start()-1, range.end()+1);
-                        deque.push_back((pos, Flow::Up, Some(floor)));
-                    } else {
-                        // Overflows
-                        if self.debug {
-                            println!("Overflowing at {:?}", pos);
-                        }
-                        self.water.insert(pos, WaterType::Flowing);
-                        deque.push_back((pos, Flow::Left, floor.clone()));
-                        deque.push_back((pos, Flow::Right, floor));
+                        pos.1 -= 1;
+                    }
+
+                    // Overflows
+                    if self.debug {
+                        println!("Overflowing at {:?} {:?}", pos, self.floor(pos));
+                    }
+                    self.water.insert(pos, WaterType::Flowing);
+                    if !deque.contains(&(pos, Flow::Sideways)) {
+                        deque.push_back((pos, Flow::Sideways));
                     }
                 },
             }
@@ -235,54 +225,28 @@ impl Cavern {
     }
 
     fn floor(&self, pos: Pos) -> Option<RangeI<usize>> {
-        if let Some(xs) = self.clay.get(&(pos.1+1)) {
-            if xs.contains(&(pos.0)) {
-                let (mut min_x, mut max_x) = (None, None);
-                let mut i = 1;
-                loop {
-                    if min_x.is_none() && !xs.contains(&(pos.0-i)) {
-                        min_x = Some(pos.0-i+1);
-                    }
+        let y = pos.1 + 1;
+        let xs = self.clay.get(&y);
+        if self.is_settled((pos.0, y), xs) {
+            let (mut min_x, mut max_x) = (pos.0, pos.0);
 
-                    if max_x.is_none() && !xs.contains(&(pos.0+i)) {
-                        max_x = Some(pos.0+i-1);
-                    }
-
-                    if min_x.is_some() && max_x.is_some() {
-                        break
-                    }
-
-                    i+=1;
-                }
-
-                return Some((min_x.unwrap())..=(max_x.unwrap()));
-            } else {
-                let mut y = pos.1 + 1;
-                let mut row = Vec::from_iter(xs.iter().cloned());
-                row.sort();
-                let mut min_x = 0;
-                for x in row {
-                    if pos.0 > x {
-                        min_x = x;
-                    } else {
-                        let max_x = x;
-                        while self.clay.get(&(y+1)).map(|xs| xs.contains(&min_x) && xs.contains(&max_x)).unwrap_or(false) {
-                            y += 1;
-                        }
-                        let xs = self.clay.get(&y).unwrap();
-                        for x in min_x..=max_x {
-                            if !xs.contains(&x) {
-                                return None
-                            }
-                        }
-                        println!("{}x{}", min_x, max_x);
-                        return Some(min_x..=max_x);
-                    }
-                }
+            while self.is_settled((min_x-1, y), xs) {
+                min_x -= 1;
             }
-        } 
+
+            while self.is_settled((max_x+1, y), xs) {
+                max_x += 1;
+            }
+
+            return Some((min_x)..=(max_x));
+        }
 
         None
+    }
+
+    fn is_settled(&self, pos: Pos, clay: Option<&HashSet<usize>>) -> bool {
+        self.water.get(&pos).map(|&w| w == WaterType::Settled).unwrap_or(false) ||
+            clay.map(|c| c.contains(&pos.0)).unwrap_or(false)
     }
 
     fn container(&self, pos: Pos, floor: Option<RangeI<usize>>) -> Option<RangeI<usize>> {
@@ -335,6 +299,7 @@ fn main() -> Result<()> {
     assert_eq!(Cavern::from("test1.input", false)?.water().len(), 57);
     assert_eq!(Cavern::from("test2.input", false)?.water().len(), 54);
     assert_eq!(Cavern::from("test3.input", false)?.water().len(), 98);
+    assert_eq!(Cavern::from("test3.input", false)?.water().values().filter(|&&v| v == WaterType::Settled).count(), 54);
 
     println!("Water tile count: {}", Cavern::from("input", true)?.water().len());
 
