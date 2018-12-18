@@ -301,7 +301,9 @@ fn main() -> Result<()> {
     assert_eq!(Cavern::from("test3.input", false)?.water().len(), 98);
     assert_eq!(Cavern::from("test3.input", false)?.water().values().filter(|&&v| v == WaterType::Settled).count(), 54);
 
-    println!("Water tile count: {}", Cavern::from("input", true)?.water().len());
+    let water = Cavern::from("input", true)?.water();
+    println!("Water tile count: {}", water.len());
+    println!("Settled water tile count: {}", water.values().filter(|&&v| v == WaterType::Settled).count());
 
     Ok(())
 }
