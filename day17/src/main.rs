@@ -130,10 +130,10 @@ impl Cavern {
     }
 
     fn water(&mut self) -> HashMap<Pos, WaterType> {
-        let min_y = 0;
+        let min_y = self.clay.keys().min().unwrap();
         let max_y = self.clay.keys().max().unwrap();
 
-        self.trace_stream((500, min_y), Flow::Down, *max_y);
+        self.trace_stream((500, *min_y-1), Flow::Down, *max_y);
 
         self.water.clone()
     }
@@ -297,8 +297,9 @@ impl Cavern {
 
 fn main() -> Result<()> {
     assert_eq!(Cavern::from("test1.input", false)?.water().len(), 57);
+    assert_eq!(Cavern::from("test1.input", false)?.water().values().filter(|&&v| v == WaterType::Settled).count(), 29);
     assert_eq!(Cavern::from("test2.input", false)?.water().len(), 54);
-    assert_eq!(Cavern::from("test3.input", false)?.water().len(), 98);
+    assert_eq!(Cavern::from("test3.input", false)?.water().len(), 97);
     assert_eq!(Cavern::from("test3.input", false)?.water().values().filter(|&&v| v == WaterType::Settled).count(), 54);
 
     let water = Cavern::from("input", true)?.water();
