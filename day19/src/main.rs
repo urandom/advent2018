@@ -1,5 +1,5 @@
 use std::fmt;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -63,29 +63,65 @@ impl Device {
     }
 
     fn execute(&mut self) -> &mut Self {
-        loop {
+        while self.registers[self.pointer] + 1 < self.instructions.len() {
             if self.debug {
-                println!("Before instruction: {:?}", self.registers);
+                println!("Before {:?}", self.registers);
             }
 
-            let instruction = self.instructions[self.registers[self.pointer]];
-            let op = instruction.0;
-
-            self.registers = op.call(&self.registers, instruction.1);
+            self.execute1();
 
             if self.debug {
-                println!("After instruction: {:?}", self.registers);
-            }
-
-            if self.registers[self.pointer] + 1 < self.instructions.len() {
-                self.registers[self.pointer] += 1;
-            } else {
-                break;
+                println!("After {:?}", self.registers);
             }
 
         }
 
         self
+    }
+
+    fn optimized(&mut self) -> &mut Self {
+        let mut stable = self.registers[1];
+        let mut count = 0;
+        loop {
+            self.execute1();
+            if self.registers[1] == stable {
+                if count > 10 {
+                    break;
+                }
+                count += 1;
+            } else {
+                count = 0;
+            }
+            stable = self.registers[1];
+        }
+
+        let mut multiples = HashSet::new();
+        for i in 1..stable {
+            if stable % i == 0 {
+                let other = stable / i;
+                if multiples.contains(&other) {
+                    break;
+                }
+                multiples.insert(i);
+                multiples.insert(stable / i);
+            }
+        }
+
+        if self.debug {
+            println!("Multiples of {}: {:?}", stable, multiples);
+        }
+
+        self.registers[0] = multiples.iter().sum();
+
+        self
+    }
+
+    fn execute1(&mut self) {
+        let instruction = self.instructions[self.registers[self.pointer]];
+        let op = instruction.0;
+
+        self.registers = op.call(&self.registers, instruction.1);
+        self.registers[self.pointer] += 1;
     }
 }
 
@@ -176,6 +212,12 @@ impl OpCode {
 
 fn main() -> Result<()> {
     assert_eq!(Device::from("test1.input", false)?.execute().registers[0], 6);
-    println!("Value of register 0: {}", Device::from("input", false)?.execute().registers[0]);
+    assert_eq!(Device::from("input", false)?.execute().registers[0], 1228);
+    assert_eq!(Device::from("input", false)?.optimized().registers[0], 1228);
+
+    let mut device = Device::from("input", true)?;
+    device.registers[0] = 1;
+    println!("Value of register 0: {}", device.optimized().registers[0]);
+
     Ok(())
 }
