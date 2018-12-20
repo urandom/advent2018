@@ -124,8 +124,9 @@ impl Path {
 
     fn distances(&self) -> HashMap<Pos, usize> {
         let mut distances = HashMap::new();
+        distances.insert((0,0), 0);
 
-        self.calc_distances((0, 0), 0, &vec![self.steps.clone()], &mut distances);
+        self.calc_distances((0, 0), &vec![self.steps.clone()], &mut distances);
         if self.debug {
             let keys: Vec<&Pos> = distances.keys().collect();
             let mut sorted: Vec<(Pos, usize)> = Vec::new();
@@ -139,30 +140,27 @@ impl Path {
         distances
     }
 
-    fn calc_distances(&self, original_pos: Pos, distance: usize, branches: &Vec<Vec<Step>>, distances: &mut HashMap<Pos, usize>) -> usize {
-        let mut distance = distance;
-
+    fn calc_distances(&self, original_pos: Pos, branches: &Vec<Vec<Step>>, distances: &mut HashMap<Pos, usize>) {
         for steps in branches {
             let mut pos = original_pos;
             for s in steps {
                 match s {
                     Step::Dir(d) => {
+                        let distance = distances[&pos]+1;
                         pos = d.inc(pos);
-                        distances.insert(pos, distance + 1);
-                        distance += 1;
+                        if !distances.contains_key(&pos) {
+                            distances.insert(pos, distance);
+                        }
                     },
                     Step::Branches(branches, false) => {
-                        distance = self.calc_distances(pos, distance, branches, distances);
+                        self.calc_distances(pos, branches, distances);
                     },
                     Step::Branches(branches, true) => {
-                        let d = self.calc_distances(pos, distance, branches, distances);
-                        distance += (d - distance) / 2;
+                        self.calc_distances(pos, branches, distances);
                     },
                 }
             }
         }
-
-        distance
     }
 }
 
@@ -171,11 +169,13 @@ fn main() -> Result<()> {
     assert_eq!(Path::from("test2.input", false)?.max_len(), 18);
     assert_eq!(Path::from("test3.input", false)?.max_len(), 23);
     assert_eq!(Path::from("test4.input", false)?.max_len(), 31);
-    assert_eq!(Path::from("test3.input", false)?.distances().iter().filter(|d| *d.1 > 10).count(), 25);
+    assert_eq!(Path::from("test3.input", false)?.distances().iter().filter(|d| *d.1 > 10).count(), 24);
     assert_eq!(Path::from("test4.input", false)?.distances().iter().filter(|d| *d.1 > 10).count(), 38);
+    assert_eq!(Path::from("test3.input", false)?.distances().iter().filter(|d| *d.1 > 15).count(), 15);
+    assert_eq!(Path::from("test2.input", false)?.distances().iter().filter(|d| *d.1 > 13).count(), 9);
 
     println!("Farthest door: {}", Path::from("input", false)?.max_len());
-    println!("# of doors: {}", Path::from("input", true)?.distances().iter().filter(|d| *d.1 > 1000).count());
+    println!("# of doors: {}", Path::from("input", false)?.distances().iter().filter(|d| *d.1 > 999).count());
 
     Ok(())
 }
