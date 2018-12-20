@@ -152,10 +152,7 @@ impl Path {
                             distances.insert(pos, distance);
                         }
                     },
-                    Step::Branches(branches, false) => {
-                        self.calc_distances(pos, branches, distances);
-                    },
-                    Step::Branches(branches, true) => {
+                    Step::Branches(branches, _) => {
                         self.calc_distances(pos, branches, distances);
                     },
                 }
