@@ -63,7 +63,8 @@ impl Device {
     }
 
     fn execute(&mut self) -> &mut Self {
-        while self.registers[self.pointer] + 1 < self.instructions.len() {
+        let mut visited = Vec::new();
+        loop {
             if self.debug {
                 println!("Before {:?}", self.registers);
             }
@@ -72,46 +73,23 @@ impl Device {
 
             if self.debug {
                 println!("After {:?}", self.registers);
+                println!("Next instr at {}: {:?}", self.pointer, self.instructions[self.pointer]);
             }
 
-        }
-
-        self
-    }
-
-    fn optimized(&mut self) -> &mut Self {
-        let mut stable = self.registers[1];
-        let mut count = 0;
-        loop {
-            self.execute1();
-            if self.registers[1] == stable {
-                if count > 10 {
+            if self.registers[self.pointer] == 28 {
+                if visited.contains(&self.registers[3]) {
                     break;
                 }
-                count += 1;
-            } else {
-                count = 0;
+                visited.push(self.registers[3]);
             }
-            stable = self.registers[1];
-        }
 
-        let mut multiples = HashSet::new();
-        for i in 1..stable {
-            if stable % i == 0 {
-                let other = stable / i;
-                if multiples.contains(&other) {
-                    break;
-                }
-                multiples.insert(i);
-                multiples.insert(stable / i);
+            if self.registers[self.pointer] >= self.instructions.len() {
+                break
             }
+
         }
 
-        if self.debug {
-            println!("Multiples of {}: {:?}", stable, multiples);
-        }
-
-        self.registers[0] = multiples.iter().sum();
+        println!("Last visited reg 3: {}", visited.last().unwrap());
 
         self
     }
@@ -202,11 +180,9 @@ impl OpCode {
                 if operands[0] == registers[operands[1]] { 1 } else { 0 },
             Oper::Eqri => registers[operands[2]] =
                 if registers[operands[0]] == operands[1] { 1 } else { 0 },
-            Oper::Eqrr => registers[operands[2]] =
-                if registers[operands[0]] == registers[operands[1]] { 1 } else {
-                    println!("{} - {} - {} - {}", operands[0], operands[1], registers[operands[0]], registers[operands[1]]);
-                    0 
-                },
+            Oper::Eqrr => registers[operands[2]] = {
+                if registers[operands[0]] == registers[operands[1]] { 1 } else { 0 }
+            },
         }
 
         registers
@@ -214,8 +190,11 @@ impl OpCode {
 }
 
 fn main() -> Result<()> {
-    let mut device = Device::from("input", true)?;
+    let mut device = Device::from("input", false)?;
     device.registers[0] = 212115;
+    println!("Value of registers: {:?}", device.execute().registers);
+
+    let mut device = Device::from("input", false)?;
     println!("Value of registers: {:?}", device.execute().registers);
 
     Ok(())
