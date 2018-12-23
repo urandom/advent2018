@@ -1,4 +1,4 @@
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Result};
@@ -62,21 +62,22 @@ impl Geology for Pos {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct State {
     cost: usize,
     pos: Pos,
     tool: Tool,
+    dist: usize,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 enum Tool {
     Torch, Climb, Neither,
 }
 
 impl Ord for State {
 	fn cmp(&self, other: &State) -> Ordering {
-		other.cost.cmp(&self.cost).then_with(|| self.pos.cmp(&other.pos))
+		other.cost.cmp(&self.cost).then_with(|| other.dist.cmp(&self.dist))
 	}
 }
 
@@ -128,66 +129,59 @@ impl Cave {
         risk
     }
 
-    fn shortest_path(&mut self) -> Option<usize> {
+    fn shortest_path(&mut self) -> usize {
         let mut dist = HashMap::new();
-        let mut seen = HashSet::new();
         let mut heap = BinaryHeap::new();
         let start = (0, 0);
 
-        dist.insert(start, 0);
-        heap.push(State{cost: 0, pos: start, tool: Tool::Torch});
-        seen.insert(start);
+        dist.insert((start, Tool::Torch), 0);
+        heap.push(State{cost: 0, dist: 0, pos: start, tool: Tool::Torch});
 
-        while let Some(State{ cost, pos, tool }) = heap.pop() {
+        while let Some(State{ cost, pos, tool, dist: _ }) = heap.pop() {
             if pos == self.target {
-                return Some(cost);
+                return cost;
             }
 
-            if cost > dist.get(&pos).map(|&v| v).unwrap_or(usize::max_value()) {
+            if cost > dist.get(&(pos, tool)).map(|&v| v).unwrap_or(usize::max_value()) {
                 continue;
             }
 
-            for p in self.adjacent(pos, &seen) {
+            for p in self.adjacent(pos) {
                 let kind = p.kind(self);
                 for alt in vec![false, true] {
-                    let (ptool, pcost) = cost_and_tool(tool, kind, alt);
+                    let (ptool, pcost) = cost_and_tool(tool, kind, self.target == p, alt);
 
-                    let next = State{cost: cost + pcost, pos: p, tool: ptool};
+                    let next = State{cost: cost + pcost, pos: p, tool: ptool, dist: dist_to(p, self.target)};
 
-                    if next.cost < dist.get(&p).map(|&v| v).unwrap_or(usize::max_value()) {
+                    if next.cost < dist.get(&(p, ptool)).map(|&v| v).unwrap_or(usize::max_value()) {
                         heap.push(next);
-                        dist.insert(p, next.cost);
+                        dist.insert((p, ptool), next.cost);
                     }
                 }
             }
         }
 
-        None
+        unreachable!()
     }
 
-    fn adjacent(&self, pos: Pos, seen: &HashSet<Pos>) -> Vec<Pos> {
+    fn adjacent(&self, pos: Pos) -> Vec<Pos> {
         let mut adj = Vec::new();
-        let max_offset = 50;
 
         // Up
-        if pos.1 > 0 && !seen.contains(&(pos.0, pos.1-1)) {
+        if pos.1 > 0 {
             adj.push((pos.0, pos.1-1))
         }
 
         // Left
-        if pos.0 > 0 && !seen.contains(&(pos.0-1, pos.1)) {
+        if pos.0 > 0 {
             adj.push((pos.0-1, pos.1))
         }
 
         // Right
-        if pos.0 < self.target.0 + max_offset && !seen.contains(&(pos.0+1, pos.1)) {
-            adj.push((pos.0+1, pos.1))
-        }
+        adj.push((pos.0+1, pos.1));
 
         // Down
-        if pos.1 < self.target.1 + max_offset  && !seen.contains(&(pos.0, pos.1+1)) {
-            adj.push((pos.0, pos.1+1))
-        }
+        adj.push((pos.0, pos.1+1));
 
         adj
     }
@@ -198,17 +192,26 @@ fn main() -> Result<()> {
 
     println!("Risk to target: {}", Cave::from("input")?.risk_to_target());
 
-    assert_eq!(Cave::from("test1.input")?.shortest_path(), Some(45));
+    assert_eq!(Cave::from("test1.input")?.shortest_path(), 45);
 
     println!("Shortest path: {:?}", Cave::from("input")?.shortest_path());
     Ok(())
 }
 
-fn cost_and_tool(tool: Tool, kind: Type, alt: bool) -> (Tool, usize) {
-    match kind {
-        Type::Rocky => if tool == Tool::Neither { return if alt { (Tool::Torch, 8) } else { (Tool::Climb, 8) } },
-        Type::Wet => if tool == Tool::Torch { return (Tool::Climb, 8) },
-        Type::Narrow => if tool == Tool::Climb { return (Tool::Neither, 8) },
+fn cost_and_tool(tool: Tool, kind: Type, target: bool, alt: bool) -> (Tool, usize) {
+    let cost = match kind {
+        Type::Rocky => if tool == Tool::Neither { if alt { (Tool::Torch, 8) } else { (Tool::Climb, 8) } } else { (tool, 1) },
+        Type::Wet => if tool == Tool::Torch { if alt { (Tool::Climb, 8) } else { (Tool::Neither, 8) } } else { (tool, 1) },
+        Type::Narrow => if tool == Tool::Climb { if alt { (Tool::Neither, 8) } else { (Tool::Torch, 8) } } else { (tool, 1) },
+    };
+
+    if target && cost.0 != Tool::Torch {
+        return (Tool::Torch, 8)
     }
-    (tool, 1)
+
+    cost
+}
+
+fn dist_to(p: Pos, t: Pos) -> usize {
+    ((p.0 as i32 - t.0 as i32).abs() + (p.1 as i32 - t.1 as i32).abs()) as usize
 }
