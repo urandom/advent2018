@@ -1,7 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Result};
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 enum Type {
     Rocky, Wet, Narrow
 }
@@ -60,6 +62,30 @@ impl Geology for Pos {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+struct State {
+    cost: usize,
+    pos: Pos,
+    tool: Tool,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum Tool {
+    Torch, Climb, Neither,
+}
+
+impl Ord for State {
+	fn cmp(&self, other: &State) -> Ordering {
+		other.cost.cmp(&self.cost).then_with(|| self.pos.cmp(&other.pos))
+	}
+}
+
+impl PartialOrd for State {
+	fn partial_cmp(&self, other: &State) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
 #[derive(Debug)]
 struct Cave {
     depth: usize,
@@ -101,11 +127,88 @@ impl Cave {
 
         risk
     }
+
+    fn shortest_path(&mut self) -> Option<usize> {
+        let mut dist = HashMap::new();
+        let mut seen = HashSet::new();
+        let mut heap = BinaryHeap::new();
+        let start = (0, 0);
+
+        dist.insert(start, 0);
+        heap.push(State{cost: 0, pos: start, tool: Tool::Torch});
+        seen.insert(start);
+
+        while let Some(State{ cost, pos, tool }) = heap.pop() {
+            if pos == self.target {
+                return Some(cost);
+            }
+
+            if cost > dist.get(&pos).map(|&v| v).unwrap_or(usize::max_value()) {
+                continue;
+            }
+
+            for p in self.adjacent(pos, &seen) {
+                let kind = p.kind(self);
+                for alt in vec![false, true] {
+                    let (ptool, pcost) = cost_and_tool(tool, kind, alt);
+
+                    let next = State{cost: cost + pcost, pos: p, tool: ptool};
+
+                    if next.cost < dist.get(&p).map(|&v| v).unwrap_or(usize::max_value()) {
+                        heap.push(next);
+                        dist.insert(p, next.cost);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn adjacent(&self, pos: Pos, seen: &HashSet<Pos>) -> Vec<Pos> {
+        let mut adj = Vec::new();
+        let max_offset = 50;
+
+        // Up
+        if pos.1 > 0 && !seen.contains(&(pos.0, pos.1-1)) {
+            adj.push((pos.0, pos.1-1))
+        }
+
+        // Left
+        if pos.0 > 0 && !seen.contains(&(pos.0-1, pos.1)) {
+            adj.push((pos.0-1, pos.1))
+        }
+
+        // Right
+        if pos.0 < self.target.0 + max_offset && !seen.contains(&(pos.0+1, pos.1)) {
+            adj.push((pos.0+1, pos.1))
+        }
+
+        // Down
+        if pos.1 < self.target.1 + max_offset  && !seen.contains(&(pos.0, pos.1+1)) {
+            adj.push((pos.0, pos.1+1))
+        }
+
+        adj
+    }
 }
 
 fn main() -> Result<()> {
     assert_eq!(Cave::from("test1.input")?.risk_to_target(), 114);
 
     println!("Risk to target: {}", Cave::from("input")?.risk_to_target());
+
+    assert_eq!(Cave::from("test1.input")?.shortest_path(), Some(45));
+
+    println!("Shortest path: {:?}", Cave::from("input")?.shortest_path());
     Ok(())
+}
+
+fn cost_and_tool(tool: Tool, kind: Type, alt: bool) -> (Tool, usize) {
+    match kind {
+        Type::Rocky => if tool == Tool::Neither { return if alt { (Tool::Torch, 8) } else { (Tool::Climb, 8) } },
+        Type::Wet => if tool == Tool::Torch { return (Tool::Climb, 8) },
+        Type::Narrow => if tool == Tool::Climb { return (Tool::Neither, 8) },
+    }
+    (tool, 1)
 }
